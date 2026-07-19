@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+:root {
+  --background: #070605;
+  --foreground: #e7e5e4;
+  --amber-glow: #d97706;
+  --stone-muted: #78716c;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+/* Syndicate-style display type — Geist black + wide tracking (no serif) */
+.font-display {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.font-label {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s ease-out both;
+}
+
+/* Wire map visuals */
+.wire-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+  opacity: 0.45;
+}
+
+.wire-live-dot {
+  animation: wire-live-blink 2s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+}
+
+@keyframes wire-live-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.wire-edge-flow {
+  animation: wire-dash-flow 3s linear infinite;
+}
+
+@keyframes wire-dash-flow {
+  to {
+    stroke-dashoffset: -6;
+  }
+}
+
+.wire-ring-spin {
+  animation: wire-ring-spin 2s linear infinite;
+  transform-origin: 0 0;
+}
+
+@keyframes wire-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.wire-node-pulse {
+  animation: wire-node-pulse 1.6s ease-in-out infinite;
+  transform-origin: 0 0;
+}
+
+@keyframes wire-node-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+.wire-burst-ring {
+  animation: wire-burst 1.4s ease-out infinite;
+  transform-origin: 0 0;
+}
+
+.wire-burst-ring-delay {
+  animation-delay: 0.35s;
+}
+
+@keyframes wire-burst {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.85);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+.wire-radar {
+  animation: wire-radar-sweep 6s linear infinite;
+}
+
+@keyframes wire-radar-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.wire-map:hover .wire-radar {
+  animation-duration: 4s;
+}
+
+/* No browser default focus ring on SVG nodes */
+.wire-map svg:focus,
+.wire-map svg *:focus {
+  outline: none;
+}
