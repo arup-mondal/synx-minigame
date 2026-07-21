@@ -13,7 +13,7 @@ import type { DropOutcome } from "@/lib/dead-drop-engine";
 import { createRunId } from "@/lib/dead-drop-engine";
 import type { PlayerGameState } from "@/lib/syndicate-api";
 import { isZoneUnlocked, unlockedZoneCount, totalZoneCount } from "@/lib/unlocked-zones";
-import { ResultModal } from "@/components/ResultModal";
+import { ResultPanel } from "@/components/ResultPanel";
 import { WireNetwork } from "@/components/WireNetwork";
 
 interface DeadDropGameProps {
@@ -27,12 +27,19 @@ interface DailyWagerLimits {
   resetAt: string;
 }
 
+const TIER_ACCENT: Record<WagerTier, string> = {
+  street: "#2dd4bf",
+  crew: "#38bdf8",
+  boss: "#f59e0b",
+  kingpin: "#f87171",
+};
+
 export function DeadDropGame({ username }: DeadDropGameProps) {
   const [player, setPlayer] = useState<PlayerGameState | null>(null);
   const [dailyLimits, setDailyLimits] = useState<DailyWagerLimits>({ usedTiers: [], resetAt: "" });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedTier, setSelectedTier] = useState<WagerTier>("street");
+  const [selectedTier, setSelectedTier] = useState<WagerTier | null>(null);
   const [selectedNode, setSelectedNode] = useState<DropNodeId | null>(null);
   const [phase, setPhase] = useState<GamePhase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +48,7 @@ export function DeadDropGame({ username }: DeadDropGameProps) {
   const [hopTrail, setHopTrail] = useState<DropNodeId[]>([]);
 
   const tierConfig = useMemo(
-    () => WAGER_TIERS.find((t) => t.id === selectedTier)!,
+    () => (selectedTier ? WAGER_TIERS.find((t) => t.id === selectedTier)! : null),
     [selectedTier],
   );
 
@@ -87,10 +94,11 @@ export function DeadDropGame({ username }: DeadDropGameProps) {
     }
   }, [selectedNode, player]);
 
-  const tierUsedToday = dailyLimits.usedTiers.includes(selectedTier);
-  const canAfford = player !== null && player.tokens >= tierConfig.costTokens;
+  const tierUsedToday = selectedTier !== null && dailyLimits.usedTiers.includes(selectedTier);
+  const canAfford = player !== null && tierConfig !== null && player.tokens >= tierConfig.costTokens;
   const canRun =
     canAfford && selectedNode !== null && phase === "idle" && !loading && !tierUsedToday;
+  const stepNumber = !selectedTier ? 1 : phase === "idle" ? 2 : 3;
 
   function applyOutcomeLocally(
     current: PlayerGameState,
@@ -109,7 +117,7 @@ export function DeadDropGame({ username }: DeadDropGameProps) {
   }
 
   async function handleIntercept() {
-    if (!selectedNode || !canAfford || !player) return;
+    if (!selectedNode || !canAfford || !player || !selectedTier || !tierConfig) return;
 
     setError(null);
     setOutcome(null);
@@ -168,6 +176,14 @@ export function DeadDropGame({ username }: DeadDropGameProps) {
     setPhase("idle");
     setHopTrail([]);
     setActiveHop(null);
+    setSelectedTier(null);
+    setSelectedNode(null);
+  }
+
+  function handleChangeWager() {
+    if (phase !== "idle") return;
+    setSelectedTier(null);
+    setSelectedNode(null);
   }
 
   async function handleDevReset() {
@@ -189,6 +205,7 @@ export function DeadDropGame({ username }: DeadDropGameProps) {
 
     setPhase("idle");
     setOutcome(null);
+    setSelectedTier(null);
     setSelectedNode(null);
     setHopTrail([]);
     setActiveHop(null);
@@ -208,8 +225,23 @@ export function DeadDropGame({ username }: DeadDropGameProps) {
 
   if (loading && !player) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <p className="font-label text-sm text-stone-500">Loading operative profile...</p>
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-6">
+        <div className="relative flex h-24 w-24 items-center justify-center">
+          <span className="preloader-spin absolute inset-0 rounded-full border border-dashed border-amber-700/40" />
+          <span className="absolute inset-1 animate-[ping_2.2s_cubic-bezier(0,0,0.2,1)_infinite] rounded-full border-2 border-amber-500/50" />
+          <div
+            className="h-16 w-16 overflow-hidden rounded-full border border-amber-700/50 shadow-[0_0_28px_rgba(217,119,6,0.35)]"
+            style={{
+              backgroundImage: "url(/syndicate.png)",
+              backgroundSize: "150%",
+              backgroundPosition: "center",
+            }}
+          />
+        </div>
+        <p className="font-label flex items-center gap-2 text-sm text-stone-500">
+          <span className="wire-live-dot inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          Loading operative profile...
+        </p>
       </div>
     );
   }
@@ -283,110 +315,206 @@ export function DeadDropGame({ username }: DeadDropGameProps) {
         </div>
       </header>
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_1.3fr]">
-        <aside className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.35em] text-stone-500">Set your wager</p>
-          <p className="text-xs text-stone-600">
-            {GAME_CONFIG.dailyTriesPerTier} intercept per tier per UTC day
-          </p>
-          {WAGER_TIERS.map((tier) => {
-            const usedToday = dailyLimits.usedTiers.includes(tier.id);
-            return (
-            <button
-              key={tier.id}
-              type="button"
-              onClick={() => setSelectedTier(tier.id)}
-              disabled={phase !== "idle"}
-              className={`w-full rounded-xl border p-4 text-left transition ${
-                selectedTier === tier.id
-                  ? "border-amber-600/70 bg-amber-950/30 shadow-lg shadow-amber-950/20"
-                  : usedToday
-                    ? "border-stone-900 bg-stone-950/30 opacity-60"
-                    : "border-stone-800 bg-stone-950/50 hover:border-stone-600"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-stone-100">{tier.label}</span>
-                <span className="font-mono text-sm text-amber-400">
-                  {formatTokens(tier.costTokens)}
+      <div className="mb-8 flex items-center justify-center gap-0 overflow-x-auto rounded-xl border border-stone-800 bg-stone-950/40 px-4 py-3">
+        {(["Stake", "Target", "Result"] as const).map((label, i) => {
+          const n = i + 1;
+          const state = n < stepNumber ? "done" : n === stepNumber ? "active" : "pending";
+          return (
+            <div key={label} className="flex flex-shrink-0 items-center">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-bold transition-colors duration-300 ${
+                    state === "done"
+                      ? "border border-emerald-400 bg-emerald-400/15 text-emerald-400"
+                      : state === "active"
+                        ? "border border-amber-400 bg-amber-400/20 text-amber-300 shadow-[0_0_0_3px_rgba(251,191,36,0.14)]"
+                        : "border border-stone-700 text-stone-500"
+                  }`}
+                >
+                  {state === "done" ? "✓" : n}
+                </span>
+                <span
+                  className={`font-mono text-[10px] uppercase tracking-[0.2em] transition-colors duration-300 ${
+                    state === "done"
+                      ? "text-emerald-400"
+                      : state === "active"
+                        ? "text-amber-300"
+                        : "text-stone-500"
+                  }`}
+                >
+                  {label}
                 </span>
               </div>
-              <p className="mt-1 text-xs text-stone-400">{tier.description}</p>
-              <p className="mt-2 text-xs text-stone-500">
-                ~{tier.interceptChancePercent}% intercept · Rare SYNX up to{" "}
-                {tier.payouts.filter((p) => p.currency === "synx").at(-1)?.amount ?? 0} in-game
-              </p>
-              {usedToday && (
-                <p className="mt-2 text-xs uppercase tracking-widest text-red-400/80">
-                  Used today · resets midnight UTC
-                </p>
+              {n < 3 && (
+                <span
+                  className={`mx-3 h-px w-9 flex-shrink-0 transition-colors duration-300 ${n < stepNumber ? "bg-emerald-400/50" : "bg-stone-800"}`}
+                />
               )}
-            </button>
-            );
-          })}
-        </aside>
-
-        <section className="rounded-2xl border border-stone-800 bg-gradient-to-b from-stone-950 to-black p-6 shadow-2xl sm:p-8">
-          <WireNetwork
-            activeNode={activeHop}
-            landingNode={outcome?.landingNode ?? null}
-            hopTrail={hopTrail}
-            playerPick={selectedNode}
-            unlockedZones={player.unlockedZones}
-            running={phase === "running"}
-            onSelectNode={setSelectedNode}
-            disabled={phase !== "idle"}
-          />
-
-          <div className="mt-6 rounded-xl border border-stone-800 bg-black/40 p-4">
-            <p className="text-xs uppercase tracking-widest text-stone-500">How it works</p>
-            <ol className="mt-2 space-y-1 text-sm text-stone-400">
-              <li>1. Tap an unlocked zone on the wire.</li>
-              <li>2. Stake {formatTokens(tierConfig.costTokens)} from your in-game balance.</li>
-              <li>3. Watch the courier signal route across Syndicate City.</li>
-              <li>4. If it lands on your zone, you skim Tokens or in-game SYNX.</li>
-              <li>5. One intercept per wager tier per UTC day.</li>
-            </ol>
-          </div>
-
-          {error && (
-            <p className="mt-4 rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={handleIntercept}
-            disabled={!canRun}
-            className="mt-6 w-full rounded-lg bg-gradient-to-r from-amber-700 via-amber-800 to-red-950 px-6 py-4 text-sm font-bold uppercase tracking-[0.25em] text-stone-100 transition hover:from-amber-600 hover:to-red-900 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {phase === "running"
-              ? "Routing signal..."
-              : `Intercept — ${formatTokens(tierConfig.costTokens)}`}
-          </button>
-
-          {!selectedNode && phase === "idle" && (
-            <p className="mt-3 text-center text-xs text-stone-500">
-              Pick an unlocked zone on the wire first.
-            </p>
-          )}
-          {selectedNode && !canAfford && !tierUsedToday && (
-            <p className="mt-3 text-center text-xs text-stone-500">Not enough Tokens.</p>
-          )}
-          {selectedNode && tierUsedToday && phase === "idle" && (
-            <p className="mt-3 text-center text-xs text-stone-500">
-              {tierConfig.label} already used today. Pick another tier or come back after midnight UTC.
-            </p>
-          )}
-        </section>
+            </div>
+          );
+        })}
       </div>
 
-      <ResultModal
-        outcome={outcome}
-        costTokens={tierConfig.costTokens}
-        onClose={closeResult}
-      />
+      {!selectedTier ? (
+        <div key="stake-step" className="animate-fade-up mx-auto max-w-2xl">
+          <p className="mb-1 text-center text-xs uppercase tracking-[0.35em] text-stone-500">
+            Set your wager
+          </p>
+          <p className="mb-6 text-center text-xs text-stone-600">
+            {GAME_CONFIG.dailyTriesPerTier} intercept per tier per UTC day
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {WAGER_TIERS.map((tier) => {
+              const usedToday = dailyLimits.usedTiers.includes(tier.id);
+              const accent = TIER_ACCENT[tier.id];
+
+              return (
+                <button
+                  key={tier.id}
+                  type="button"
+                  onClick={() => setSelectedTier(tier.id)}
+                  disabled={usedToday}
+                  style={{ borderColor: usedToday ? undefined : `${accent}55` }}
+                  className={`wager-card group relative overflow-hidden border p-4 pt-5 text-left transition ${
+                    usedToday
+                      ? "border-stone-900 bg-stone-950/30"
+                      : "bg-stone-950/60 hover:bg-stone-950/80"
+                  }`}
+                >
+                  {!usedToday && (
+                    <>
+                      <span className="absolute inset-x-0 top-0 h-[2px]" style={{ background: accent }} />
+                      <span className="wager-card-grid pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                    </>
+                  )}
+
+                  {usedToday && (
+                    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                      <div className="flex h-20 w-20 -rotate-12 items-center justify-center rounded-full border-2 border-red-500/70 bg-stone-950 shadow-[0_2px_14px_rgba(0,0,0,0.6)]">
+                        <div className="flex h-16 w-16 flex-col items-center justify-center rounded-full border border-dashed border-red-500/40">
+                          <span className="font-mono text-[10px] font-bold uppercase leading-none tracking-wider text-red-400">
+                            Used
+                          </span>
+                          <span className="mt-1 font-mono text-[9px] font-bold uppercase leading-none tracking-wider text-red-400/70">
+                            Today
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className={usedToday ? "opacity-40" : ""}>
+                    <div className="relative flex items-start justify-between gap-2">
+                      <span className="font-display text-sm text-stone-100">{tier.label}</span>
+                    </div>
+
+                    <p className="relative mt-3 text-xs leading-relaxed text-stone-400">{tier.description}</p>
+
+                    <p className="relative mt-3 font-mono text-[10px] uppercase tracking-[0.15em] text-stone-600">
+                      {usedToday ? 1 : 0}/{GAME_CONFIG.dailyTriesPerTier} intercepts used today
+                    </p>
+
+                    <div className="relative mt-4 flex items-center justify-between gap-2">
+                      <span
+                        className="rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-wider"
+                        style={{
+                          borderColor: usedToday ? "#44403c" : `${accent}55`,
+                          color: usedToday ? "#78716c" : accent,
+                        }}
+                      >
+                        {usedToday ? "Locked" : formatTokens(tier.costTokens)}
+                      </span>
+                      {!usedToday && (
+                        <span className="rounded bg-stone-800/80 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-stone-300 opacity-70 transition-opacity group-hover:opacity-100">
+                          Select
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div key="target-step" className="animate-fade-up mx-auto max-w-2xl">
+          <div className="mb-4 flex items-center justify-between rounded-xl border border-stone-800 bg-stone-950/40 px-4 py-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-stone-500">Wager</p>
+              <p className="text-sm font-semibold text-stone-100">
+                {tierConfig?.label}{" "}
+                <span className="font-mono text-amber-400">
+                  · {formatTokens(tierConfig?.costTokens ?? 0)}
+                </span>
+              </p>
+            </div>
+            {phase === "idle" && (
+              <button
+                type="button"
+                onClick={handleChangeWager}
+                className="text-xs uppercase tracking-widest text-stone-500 hover:text-amber-400"
+              >
+                Change
+              </button>
+            )}
+          </div>
+
+          <section className="rounded-2xl border border-stone-800 bg-gradient-to-b from-stone-950 to-black p-6 shadow-2xl sm:p-8">
+            {phase === "result" && outcome ? (
+              <ResultPanel outcome={outcome} costTokens={tierConfig?.costTokens ?? 0} onClose={closeResult} />
+            ) : (
+              <>
+                <p className="mb-4 text-xs uppercase tracking-[0.35em] text-stone-500">
+                  Pick intercept node
+                </p>
+                <WireNetwork
+                  activeNode={activeHop}
+                  landingNode={outcome?.landingNode ?? null}
+                  hopTrail={hopTrail}
+                  playerPick={selectedNode}
+                  unlockedZones={player.unlockedZones}
+                  running={phase === "running"}
+                  onSelectNode={setSelectedNode}
+                  disabled={phase !== "idle"}
+                />
+
+                {error && (
+                  <p className="mt-4 rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleIntercept}
+                  disabled={!canRun}
+                  className="mt-6 w-full rounded-lg bg-gradient-to-r from-amber-700 via-amber-800 to-red-950 px-6 py-4 text-sm font-bold uppercase tracking-[0.25em] text-stone-100 transition hover:from-amber-600 hover:to-red-900 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {phase === "running"
+                    ? "Routing signal..."
+                    : tierConfig
+                      ? `Intercept — ${formatTokens(tierConfig.costTokens)}`
+                      : "Select a wager tier"}
+                </button>
+
+                {!selectedNode && phase === "idle" && (
+                  <p className="mt-3 text-center text-xs text-stone-500">
+                    Pick an unlocked zone on the wire first.
+                  </p>
+                )}
+                {selectedNode && tierConfig && !canAfford && !tierUsedToday && (
+                  <p className="mt-3 text-center text-xs text-stone-500">Not enough Tokens.</p>
+                )}
+                {selectedNode && tierConfig && tierUsedToday && phase === "idle" && (
+                  <p className="mt-3 text-center text-xs text-stone-500">
+                    {tierConfig.label} already used today. Pick another tier or come back after midnight UTC.
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

@@ -50,6 +50,56 @@ body {
   animation: fade-up 0.6s ease-out both;
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out both;
+}
+
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-pop {
+  animation: modal-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Preloader visuals */
+@keyframes preloader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.preloader-spin {
+  animation: preloader-spin 3.5s linear infinite;
+}
+
+/* Wager card visuals */
+.wager-card {
+  clip-path: polygon(18px 0, 100% 0, 100% 100%, 0 100%, 0 18px);
+}
+
+.wager-card-grid {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 24px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 24px);
+}
+
 /* Wire map visuals */
 .wire-scanlines {
   background: repeating-linear-gradient(
