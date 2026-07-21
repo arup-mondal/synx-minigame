@@ -84,6 +84,28 @@ export function getPlayerApiUrl(username: string): string {
   return `${getSyndicateApiBase()}/api/players/${encodeURIComponent(username)}`;
 }
 
+/**
+ * SYNX balance isn't on the player profile — the main game fetches it live from
+ * Hive-Engine via a dedicated auth-cookie-gated endpoint. Falls back to 0 (not
+ * thrown) so a missing/expired cookie degrades to "no balance" rather than
+ * failing the whole player load.
+ */
+async function fetchSynxBalance(cookie: string | null | undefined): Promise<number> {
+  if (!cookie) return 0;
+
+  try {
+    const response = await fetch(`${API_BASE}/api/player/synx`, {
+      headers: { Accept: "application/json", Cookie: cookie },
+      cache: "no-store",
+    });
+    if (!response.ok) return 0;
+    const data = (await response.json()) as { balance?: number };
+    return typeof data.balance === "number" ? data.balance : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function fetchPlayerState(
   username: string,
   options?: { cookie?: string | null },
@@ -94,17 +116,17 @@ export async function fetchPlayerState(
     headers.Cookie = options.cookie;
   }
 
-  const response = await fetch(url, {
-    headers,
-    cache: "no-store",
-  });
+  const [response, synxBalance] = await Promise.all([
+    fetch(url, { headers, cache: "no-store" }),
+    fetchSynxBalance(options?.cookie),
+  ]);
 
   if (!response.ok) {
     throw new Error(`Player not found: @${username}`);
   }
 
   const data = (await response.json()) as SyndicatePlayerResponse;
-  const player = mapPlayerResponse(data);
+  const player = { ...mapPlayerResponse(data), synx: synxBalance };
 
   if (isLocalDev()) {
     const wallet = await getDevWallet(username);
