@@ -12,6 +12,7 @@ import {
 import type { DropOutcome } from "@/lib/dead-drop-engine";
 import { createRunId } from "@/lib/dead-drop-engine";
 import type { PlayerGameState } from "@/lib/syndicate-api";
+import { isLocalDev } from "@/lib/local-dev";
 import { isZoneUnlocked, unlockedZoneCount, totalZoneCount } from "@/lib/unlocked-zones";
 import { ResultPanel } from "@/components/ResultPanel";
 import { WireNetwork } from "@/components/WireNetwork";
@@ -304,15 +305,17 @@ export function DeadDropGame({ username }: DeadDropGameProps) {
           <h1 className="font-display text-4xl text-stone-100">{GAME_CONFIG.name}</h1>
           <p className="mt-1 max-w-xl text-sm text-stone-400">{GAME_CONFIG.tagline}</p>
         </div>
-        <div className="text-right">
-          <p className="text-xs uppercase tracking-widest text-stone-500">Operative · Lv {player.level}</p>
-          <p className="font-mono text-lg text-amber-400">@{player.username}</p>
-          <p className="mt-1 text-sm text-stone-400">{formatTokens(player.tokens)}</p>
-          <p className="text-sm text-stone-500">{formatSynx(player.synx)}</p>
-          <p className="mt-1 text-xs text-stone-600">
-            Zones {unlockedZoneCount(player.unlockedZones)}/{totalZoneCount()} unlocked
-          </p>
-        </div>
+        {isLocalDev() && (
+          <div className="text-right">
+            <p className="text-xs uppercase tracking-widest text-stone-500">Operative · Lv {player.level}</p>
+            <p className="font-mono text-lg text-amber-400">@{player.username}</p>
+            <p className="mt-1 text-sm text-stone-400">{formatTokens(player.tokens)}</p>
+            <p className="text-sm text-stone-500">{formatSynx(player.synx)}</p>
+            <p className="mt-1 text-xs text-stone-600">
+              Zones {unlockedZoneCount(player.unlockedZones)}/{totalZoneCount()} unlocked
+            </p>
+          </div>
+        )}
       </header>
 
       <div className="mb-8 flex items-center justify-center gap-0 overflow-x-auto rounded-xl border border-stone-800 bg-stone-950/40 px-4 py-3">
