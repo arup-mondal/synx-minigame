@@ -1,4 +1,4 @@
-import type { DropNodeId } from "@/lib/game-config";
+import type { DropNodeId, WagerTier } from "@/lib/game-config";
 import { getDevWallet } from "@/lib/dev-wallet";
 import { isLocalDev } from "@/lib/local-dev";
 import { DEFAULT_UNLOCKED_ZONES, hasSyndicateZoneAccess } from "@/lib/unlocked-zones";
@@ -144,4 +144,58 @@ export async function fetchPlayerState(username: string): Promise<PlayerGameStat
   }
 
   return player;
+}
+
+export interface SettlePlayPayload {
+  username: string;
+  runId: string;
+  tier: WagerTier;
+  costTokens: number;
+  /** Net Token change for this run, e.g. -50 stake + 120 payout = 70 */
+  tokenDelta: number;
+  /** SYNX credited this run (0 if none won) */
+  synxDelta: number;
+  won: boolean;
+  payoutLabel: string | null;
+}
+
+/**
+ * Reports a completed play to the main game so it can debit/credit the
+ * player's real Tokens/SYNX balance and log the transaction to its own
+ * history. Production-only — never called for the local dev wallet.
+ *
+ * Endpoint path/shape is an assumption pending confirmation from the
+ * main-game team (see the integration brief) — update once confirmed.
+ * Best-effort: failure here does not fail the /api/play response, since
+ * Dead Drop's balances are optimistic-UI until this contract is finalized.
+ * Failures are logged so they're visible, not silently swallowed.
+ */
+export async function settlePlayResult(payload: SettlePlayPayload): Promise<boolean> {
+  if (!SERVICE_API_KEY) return false;
+
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/players/${encodeURIComponent(payload.username)}/dead-drop-settle`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...serviceAuthHeaders(),
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    if (!response.ok) {
+      console.error(
+        `[dead-drop] settle failed for @${payload.username} run ${payload.runId}: ${response.status}`,
+      );
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error(`[dead-drop] settle request failed for run ${payload.runId}:`, error);
+    return false;
+  }
 }

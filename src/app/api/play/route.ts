@@ -4,7 +4,7 @@ import { isDailyWagerAvailable, recordDailyWagerUse } from "@/lib/daily-wager-li
 import { resolveDeadDrop } from "@/lib/dead-drop-engine";
 import { applyDevWalletTransaction, getDevWallet } from "@/lib/dev-wallet";
 import { isLocalDev } from "@/lib/local-dev";
-import { fetchPlayerState } from "@/lib/syndicate-api";
+import { fetchPlayerState, settlePlayResult } from "@/lib/syndicate-api";
 import { hasSyndicateZoneAccess, isZoneUnlocked } from "@/lib/unlocked-zones";
 
 export const dynamic = "force-dynamic";
@@ -72,19 +72,31 @@ export async function POST(request: Request) {
     processedRuns.add(runId);
     const outcome = resolveDeadDrop(tier, pickNode, runId);
 
-    if (isLocalDev()) {
-      let tokenDelta = -tierConfig.costTokens;
-      let synxDelta = 0;
+    let tokenDelta = -tierConfig.costTokens;
+    let synxDelta = 0;
 
-      if (outcome.won && outcome.payoutAmount > 0) {
-        if (outcome.payoutCurrency === "tokens") tokenDelta += outcome.payoutAmount;
-        if (outcome.payoutCurrency === "synx") synxDelta += outcome.payoutAmount;
-      }
-
-      await applyDevWalletTransaction(username, { tokenDelta, synxDelta });
+    if (outcome.won && outcome.payoutAmount > 0) {
+      if (outcome.payoutCurrency === "tokens") tokenDelta += outcome.payoutAmount;
+      if (outcome.payoutCurrency === "synx") synxDelta += outcome.payoutAmount;
     }
 
-    // TODO: POST debit/credit to Syndicate backend when dead-drop endpoint exists (production)
+    if (isLocalDev()) {
+      await applyDevWalletTransaction(username, { tokenDelta, synxDelta });
+    } else {
+      // Best-effort: balances stay optimistic client-side even if this fails,
+      // per the current production caveat — failure is logged, not thrown.
+      await settlePlayResult({
+        username,
+        runId,
+        tier,
+        costTokens: tierConfig.costTokens,
+        tokenDelta,
+        synxDelta,
+        won: outcome.won,
+        payoutLabel: outcome.payoutLabel,
+      });
+    }
+
     return NextResponse.json({
       ...outcome,
       costTokens: tierConfig.costTokens,
