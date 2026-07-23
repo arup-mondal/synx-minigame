@@ -35,9 +35,7 @@ export async function POST(request: Request) {
 
     let player;
     try {
-      player = await fetchPlayerState(username, {
-        cookie: request.headers.get("cookie"),
-      });
+      player = await fetchPlayerState(username);
     } catch {
       return NextResponse.json({ error: "Could not load player profile." }, { status: 404 });
     }

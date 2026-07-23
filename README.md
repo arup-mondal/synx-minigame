@@ -4,21 +4,21 @@
 
 ## Player data
 
-Loaded from the Syndicate API — no login screen in this app:
+Loaded server-to-server from the Syndicate API — no login screen in this app,
+and no dependency on the player's browser cookie reaching Dead Drop's origin:
 
 ```
 GET https://syndicate-protocol.com/api/players/{username}
+GET https://syndicate-protocol.com/api/player/synx?username={username}
 ```
 
 | Field | Source |
 |-------|--------|
 | **Tokens** | `player.profile.balance` |
-| **SYNX** | `player.profile.synxBalance` or `player.profile.synx` |
+| **SYNX** | dedicated SYNX endpoint (`balance`) |
 | **Unlocked zones** | `player.profile.unlockedZones` + Iron Row (always free) |
 
-Same endpoint the main game uses: `GET /api/players/{username}`.
-
-**Note:** `balance` and SYNX are only included when the request carries a logged-in Syndicate session (browser cookies). On `localhost` without that session, zones load but token balance may show as 0. When embedded on `syndicate-protocol.com`, the app fetches the API directly with `credentials: include` — same as the main game.
+**Note:** Both calls are authenticated with `SYNDICATE_SERVICE_API_KEY` (server-only env var, sent as `Authorization: Bearer <key>`), not the player's session cookie. Cross-subdomain cookies through an iframe are unreliable under third-party/partitioned-cookie browser policies, so balance lookups don't depend on them. Without the key configured, balance/SYNX degrade to `0` rather than failing player load — zones still load either way (they aren't gated).
 
 Proxy route: `GET /api/player/{username}`
 
@@ -53,18 +53,9 @@ Deploy this app as its own Next.js project, e.g.:
 https://dead-drop.syndicate-protocol.com
 ```
 
-### Cookie requirement (critical)
+### Service auth requirement (critical)
 
-Token/SYNX balances only appear when Syndicate session cookies reach this app’s server proxy.
-
-On the **main game**, session cookies must be set with:
-
-```
-Domain=.syndicate-protocol.com
-Secure; SameSite=Lax
-```
-
-Without the leading-dot domain, cookies stay on `syndicate-protocol.com` and **will not** be sent to `dead-drop.syndicate-protocol.com`. Zones still load; balances stay `0`.
+Token/SYNX balances only appear when `SYNDICATE_SERVICE_API_KEY` is configured on Dead Drop's deployment. This key is issued by the main-game team and lets Dead Drop's server fetch any given username's balance directly (`Authorization: Bearer`), independent of browser cookies or which subdomain the request is served from. Without it, zones still load (unauthenticated); balances stay `0`.
 
 ### Option A — iframe from the main game
 
@@ -95,7 +86,7 @@ window.addEventListener("message", (event) => {
 
 `?embed=1` hides the footer for a tighter in-game panel.
 
-### Option B — same-origin path (best cookie story)
+### Option B — same-origin path
 
 Reverse-proxy this app under the main domain:
 
@@ -103,15 +94,14 @@ Reverse-proxy this app under the main domain:
 https://syndicate-protocol.com/dead-drop  →  dead-drop service
 ```
 
-Then cookies work with no Domain change. Example nginx:
-
 ```nginx
 location /dead-drop/ {
   proxy_pass https://dead-drop.internal/;
   proxy_set_header Host $host;
-  proxy_set_header Cookie $http_cookie;
 }
 ```
+
+Balance/SYNX work the same either way (Option A or B) since they're fetched server-to-server with `SYNDICATE_SERVICE_API_KEY`, not via the player's cookie.
 
 ### Env for embed / CORS
 
@@ -120,6 +110,7 @@ DEAD_DROP_FRAME_ANCESTORS=https://syndicate-protocol.com https://www.syndicate-p
 DEAD_DROP_CORS_ORIGINS=https://syndicate-protocol.com,https://www.syndicate-protocol.com
 NEXT_PUBLIC_DEAD_DROP_PARENT_ORIGINS=https://syndicate-protocol.com,https://www.syndicate-protocol.com
 NEXT_PUBLIC_SYNDICATE_API_URL=https://syndicate-protocol.com
+SYNDICATE_SERVICE_API_KEY=<issued by the main-game team, server-only>
 ```
 
 ### Still required for real economy

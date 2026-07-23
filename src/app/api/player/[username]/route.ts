@@ -13,9 +13,7 @@ export async function GET(
       return NextResponse.json({ error: "Username required." }, { status: 400 });
     }
 
-    const player = await fetchPlayerState(username.trim(), {
-      cookie: request.headers.get("cookie"),
-    });
+    const player = await fetchPlayerState(username.trim());
     return NextResponse.json(player);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load player.";

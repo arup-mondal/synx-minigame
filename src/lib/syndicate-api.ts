@@ -8,6 +8,19 @@ const API_BASE =
   process.env.NEXT_PUBLIC_SYNDICATE_API_URL ??
   "https://syndicate-protocol.com";
 
+/**
+ * Server-to-server credential for the main Syndicate API. Lets Dead Drop's
+ * backend fetch a player's balance directly, without depending on the
+ * player's browser cookie reaching Dead Drop's origin (unreliable across a
+ * cross-subdomain iframe under third-party/partitioned cookie policies).
+ * Must never be exposed to the client — no NEXT_PUBLIC_ prefix.
+ */
+const SERVICE_API_KEY = process.env.SYNDICATE_SERVICE_API_KEY ?? "";
+
+function serviceAuthHeaders(): HeadersInit {
+  return SERVICE_API_KEY ? { Authorization: `Bearer ${SERVICE_API_KEY}` } : {};
+}
+
 export interface SyndicatePlayerProfile {
   balance?: number;
   synx?: number;
@@ -86,18 +99,21 @@ export function getPlayerApiUrl(username: string): string {
 
 /**
  * SYNX balance isn't on the player profile — the main game fetches it live from
- * Hive-Engine via a dedicated auth-cookie-gated endpoint. Falls back to 0 (not
- * thrown) so a missing/expired cookie degrades to "no balance" rather than
+ * Hive-Engine via a dedicated endpoint. Falls back to 0 (not thrown) so a
+ * missing/unconfigured service key degrades to "no balance" rather than
  * failing the whole player load.
  */
-async function fetchSynxBalance(cookie: string | null | undefined): Promise<number> {
-  if (!cookie) return 0;
+async function fetchSynxBalance(username: string): Promise<number> {
+  if (!SERVICE_API_KEY) return 0;
 
   try {
-    const response = await fetch(`${API_BASE}/api/player/synx`, {
-      headers: { Accept: "application/json", Cookie: cookie },
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `${API_BASE}/api/player/synx?username=${encodeURIComponent(username)}`,
+      {
+        headers: { Accept: "application/json", ...serviceAuthHeaders() },
+        cache: "no-store",
+      },
+    );
     if (!response.ok) return 0;
     const data = (await response.json()) as { balance?: number };
     return typeof data.balance === "number" ? data.balance : 0;
@@ -106,19 +122,13 @@ async function fetchSynxBalance(cookie: string | null | undefined): Promise<numb
   }
 }
 
-export async function fetchPlayerState(
-  username: string,
-  options?: { cookie?: string | null },
-): Promise<PlayerGameState> {
+export async function fetchPlayerState(username: string): Promise<PlayerGameState> {
   const url = `${API_BASE}/api/players/${encodeURIComponent(username)}`;
-  const headers: HeadersInit = { Accept: "application/json" };
-  if (options?.cookie) {
-    headers.Cookie = options.cookie;
-  }
+  const headers: HeadersInit = { Accept: "application/json", ...serviceAuthHeaders() };
 
   const [response, synxBalance] = await Promise.all([
     fetch(url, { headers, cache: "no-store" }),
-    fetchSynxBalance(options?.cookie),
+    fetchSynxBalance(username),
   ]);
 
   if (!response.ok) {
